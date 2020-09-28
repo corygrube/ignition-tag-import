@@ -12,3 +12,5 @@ json templates/PIDV1.json
 json templates/PIDV2.json
 tags.xlsx
 tags.CSV
+workspace.code-workspace
+venv
