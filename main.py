@@ -187,27 +187,14 @@ import_dict['tags'][10]['tags'] = CM2SM_tags
 # Dump import_dict to file
 json.dump(import_dict, json_file)
 
-# udt_dict = {
-#     'CMCSM': 'Control Modules/CMCSM/gtypCMCSM',
-#     'CMVSM': 'Control Modules/CMVSM/gtypCMVSM',
-#     'CMIV': 'Control Modules/CMIV/gtypCMIV',
-#     'CMCV': 'Control Modules/CMCV/gtypCMCV',
-#     'CMDD': 'Control Modules/CMDD/gtypCMDD',
-#     'CMID': 'Control Modules/CMID/gtypCMID',
-#     'CMCD': 'Control Modules/CMCD/gtypCMCD',
-#     'PIDv1': 'Control Modules/PID/gtypPIDv1',
-#     'PIDv2': 'Control Modules/PID/gtypPIDv2',
-#     'AI': 'Control Modules/AI/gtypAI',
-#     'DI': 'Control Modules/DI/gtypDI',
-# }
 
-# class folder:
+# class tag_folder:
 #     def __init__(self, name):
 #         self.name = name
 #         self.tagType = 'Folder'
 #         self.tags = []
 
-# class tag:
+# class tag_standard:
 #     def __init__(self, name, dataType):
 #         self.name = name
 #         self.dataType = dataType
@@ -218,16 +205,55 @@ json.dump(import_dict, json_file)
 #         self.opcItemPath = plc + name
 #         self.documentation = None
 
-# class udt:
-#     def __init__(self, name, udtType):
+# class tag_udt:
+#     def __init__(self, name, udt_name):
 #         self.name = name
 #         self.documentation = None
 #         self.tagType = 'UdtInstance'
 #         self.parameters = {
 #             'req_plc': plc
 #         }
-
 #         try:
-#             self.typeId = udt_dict[udtType]
+#             self.typeId = udt_dict[udt_name]['udt_ignition']
 #         except:
 #             self.typeId = 'None'
+
+
+# # UDT definitions used when constructing tags and searching excel/csv.
+# # Nested lists used to allow for easier future automation/GUI input
+# # Primary list:     one UDT (secondary list) per element
+# # Secondary list:   [UDT Name, Ignition UDT Path, PLC UDT, PLC UDT Array (for aliased tags - optional)]
+# # PLC UDT generally refers to HMIData tag UDT.
+# # PLC UDT array primarily used for AI/DI imports, where tags are largely defined as array aliases
+# udt_raw = [
+#     ['CMCSM',   'Standard/CMCSM/gtypCMCSM',     'gtypCMCSMHmiData',     None],
+#     ['CMVSM',   'Standard/CMVSM/gtypCMVSM',     'gtypCMVSMHmiData',     None],
+#     ['CMIV',    'Standard/CMIV/gtypCMIV',       'gtypCMIVHmiData',      None],
+#     ['CMCV',    'Standard/CMCV/gtypCMCV',       'gtypCMCVHmiData',      None],
+#     ['CMDD',    'Standard/CMDD/gtypCMDD',       'gtypCMDDHmiData',      None],
+#     ['CMID',    'Standard/CMID/gtypCMID',       'gtypCMIDHmiData',      None],
+#     ['CMCD',    'Standard/CMCD/gtypCMCD',       'gtypCMCDHmiData',      None],
+#     ['PIDv1',   'Standard/PID/gtypPIDv1',       'gtypPIDHmiData',       None],
+#     ['PIDv2',   'Standard/PID/gtypPIDv2',       'gtypPID_v2_HmiData',   None],
+#     ['AI',      'Standard/AI/gtypAI',           'gtypAIHmiData',        'gtaAIHmiData'],
+#     ['DI',      'Standard/DI/gtypDI',           'gtypDIHmiData',        'gtaDIHmiData']   
+# ]
+
+# # UDT dictionary enables simple loops to create tags lists iteratively. Example dict entry:
+# # {   
+# #     'CMCSM': {
+# #         'udt_ignition': 'Standard/CMCSM/gtypCMCSM',
+# #         'udt_plc': 'gtypCMCSMHmiData',
+# #         'udt_plc_array': None
+# #     },
+# #     ...
+# # }
+# udt_dict = {}
+# for i in range(len(udt_raw)):
+#     temp = {}
+#     temp['udt_ignition']    = udt_raw[i][1]
+#     temp['udt_plc']         = udt_raw[i][2]
+#     temp['udt_plc_array']   = udt_raw[i][3]
+
+#     udt_dict[udt_raw[i][0]] = temp
+
