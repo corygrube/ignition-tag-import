@@ -1,259 +1,181 @@
 import json
 import xlrd
 import re
-
-# Open/create tag import JSON file
-# Load excel book
-# Load UDT dicts from json files
-json_file = open('tag import.json', 'w+')
-book = xlrd.open_workbook('tags.xlsx')
-AI_json = open('json templates/AI.json', 'r')
-AI_temp = json.load(AI_json)
-AI_tags = []
-DI_json = open('json templates/DI.json', 'r')
-DI_temp = json.load(DI_json)
-DI_tags = []
-CM2SM_json = open('json templates/CM2SM.json', 'r')
-CM2SM_temp = json.load(CM2SM_json)
-CM2SM_tags = []
-CMCSM_json = open('json templates/CMCSM.json', 'r')
-CMCSM_temp = json.load(CMCSM_json)
-CMCSM_tags = []
-CMVSM_json = open('json templates/CMVSM.json', 'r')
-CMVSM_temp = json.load(CMVSM_json)
-CMVSM_tags = []
-CMIV_json = open('json templates/CMIV.json', 'r')
-CMIV_temp = json.load(CMIV_json)
-CMIV_tags = []
-CMCV_json = open('json templates/CMCV.json', 'r')
-CMCV_temp = json.load(CMCV_json)
-CMCV_tags = []
-CMDD_json = open('json templates/CMDD.json', 'r')
-CMDD_temp = json.load(CMDD_json)
-CMDD_tags = []
-CMID_json = open('json templates/CMID.json', 'r')
-CMID_temp = json.load(CMID_json)
-CMID_tags = []
-CMCD_json = open('json templates/CMCD.json', 'r')
-CMCD_temp = json.load(CMCD_json)
-CMCD_tags = []
-PIDv1_json = open('json templates/PIDv1.json', 'r')
-PIDv1_temp = json.load(PIDv1_json)
-PIDv1_tags = []
-PIDv2_json = open('json templates/PIDv2.json', 'r')
-PIDv2_temp = json.load(PIDv2_json)
-PIDv2_tags = []
+from datetime import datetime
 
 
-# Set PLC name, create import dict
+# Ignition folder class
+class tag_folder:
+    def __init__(self, name):
+        self.name = name
+        self.tagType = 'Folder'
+        self.tags = []
+
+# Ignition standard datatype tag class
+class tag_standard:
+    def __init__(self, name, dataType, plc):
+        self.name = name
+        self.dataType = dataType
+        self.tagType = 'AtomicTag'
+        self.tagGroup = 'Direct 1s'
+        self.valueSource = 'opc'
+        self.opcServer = 'RSLinx'
+        self.opcItemPath = plc + name
+        self.documentation = None
+
+# Ignition UDT tag class
+class tag_udt:
+    def __init__(self, name, udt_name, plc):
+        self.name = name
+        self.documentation = None
+        self.tagType = 'UdtInstance'
+        self.parameters = {
+            'req_plc': plc
+        }
+        
+        # try/except handles cases where desired UDT isn't defined in Ignition
+        # Empty 'None' UDT type created for this purpose 
+        try:
+            self.typeId = udt_dict[udt_name]['udt_ignition']
+        except:
+            self.typeId = 'None'
+
+
+# UDT definitions used when constructing tags and searching excel/csv.
+# Nested lists used to allow for easier future automation/GUI input
+# Primary list:     one UDT (secondary list) per element
+# Secondary list:   [UDT Name, Ignition UDT Path, PLC UDT, PLC UDT Alias (for array-aliased tags - optional), PLC UDT name prefix]
+# PLC UDT generally refers to HMIData tag UDT.
+# PLC UDT array primarily used for AI/DI imports, where tags are largely defined as array aliases
+udt_raw = [
+    ['CMCSM',   'Standard/CMCSM/gtypCMCSM',     'gtypCMCSMHmiData',     None,               'gt_CMCSMHmiData_'],
+    ['CMVSM',   'Standard/CMVSM/gtypCMVSM',     'gtypCMVSMHmiData',     None,               'gt_CMVSMHmiData_'],
+    ['CMIV',    'Standard/CMIV/gtypCMIV',       'gtypCMIVHmiData',      None,               'gt_CMIVHmiData_'],
+    ['CMCV',    'Standard/CMCV/gtypCMCV',       'gtypCMCVHmiData',      None,               'gt_CMCVHmiData_'],
+    ['CMDD',    'Standard/CMDD/gtypCMDD',       'gtypCMDDHmiData',      None,               'gt_CMDDHmiData_'],
+    ['CMID',    'Standard/CMID/gtypCMID',       'gtypCMIDHmiData',      None,               'gt_CMIDHmiData_'],
+    ['CMCD',    'Standard/CMCD/gtypCMCD',       'gtypCMCDHmiData',      None,               'gt_CMCDHmiData_'],
+    ['PIDv1',   'Standard/PID/gtypPIDv1',       'gtypPIDHmiData',       None,               'gt_PidHmiData_'],
+    ['PIDv2',   'Standard/PID/gtypPIDv2',       'gtypPID_v2_HmiData',   None,               'gt_PidHmiData_'],
+    ['AI',      'Standard/AI/gtypAI',           'gtypAIHmiData',        'gtaAIHmiData',     'gt_HmiData_'],
+    ['DI',      'Standard/DI/gtypDI',           'gtypDIHmiData',        'gtaDIHmiData',     'gt_HmiData_']   
+]
+
+# UDT dictionary enables simple loops to create tags lists iteratively. Example dict entry:
+# {   
+#     'CMCSM': {
+#         'udt_ignition': 'Standard/CMCSM/gtypCMCSM',
+#         'udt_plc': 'gtypCMCSMHmiData',
+#         'udt_plc_alias': None,
+#         'udt_plc_prefix': 'gt_CMCSMHmiData_'
+#     },
+#     ...
+# }
+udt_dict = {}
+for i in range(len(udt_raw)):
+    temp = {}
+    temp['udt_ignition']    = udt_raw[i][1]
+    temp['udt_plc']         = udt_raw[i][2]
+    temp['udt_plc_alias']   = udt_raw[i][3]
+    temp['udt_plc_prefix']   = udt_raw[i][4]
+
+    udt_dict[udt_raw[i][0]] = temp
+
+
+# Standard tag definitions used when constructing tags and searching excel/csv.
+# Nested lists used to allow for easier future automation/GUI input
+# Primary list:     one standard tag type (secondary list) per element
+# Secondary list:   [PLC datatype, Ignition datatype, PLC tagname prefix]
+standard_raw = [
+    ['BOOL',    'Boolean',  'gb_HmiData_'],
+    ['INT',     'Short',    'gi_HmiData_'],
+    ['DINT',    'Integer',  'gd_HmiData_'],
+    ['REAL',    'Float',    'gr_HmiData_'],
+    ['STRING',  'String',  'gs_HmiData_'],
+]
+
+# Standard tag dictionary enables simple loops to create tags lists iteratively. Example dict entry:
+# {   
+#     'BOOL': {
+#         'ignition_datatype': 'Boolean',
+#         'plc_prefix': 'gb_HmiData_'
+#     },
+#     ...
+# }
+standard_dict = {}
+for i in range(len(standard_raw)):
+    temp = {}
+    temp['ignition_datatype']    = standard_raw[i][1]
+    temp['plc_prefix']         = standard_raw[i][2]
+
+    standard_dict[standard_raw[i][0]] = temp
+
+
+# Load excel workbook
+workbook = xlrd.open_workbook('ignition-tag-import/tags.xlsx')
+sheet = workbook.sheet_by_index(0)
+
+# Define plc shortcut, import folder
 plc = '[B8_CP_001]'
-import_dict = {}
+import_folder = tag_folder('Imported')
 
-# Load sheet. CSV, so only 1 sheet (index 0)
-sheet = book.sheet_by_index(0)
-
-# Read tag addresses/descriptions from excel, load into tag dict
-for row in range(sheet.nrows):
-    # Evaluate TAG rows (not alias, comment etc).
-    if sheet.cell_value(row,0) == 'TAG':
-        if sheet.cell_value(row,4) == 'gtypCM2SMHmiData' and sheet.cell_value(row,1) == '':
-            name = str(sheet.cell_value(row,2))
-            CM2SM_temp['name'] = re.sub('gt_CM2SMHmiData_', '', name, flags=re.I)
-            CM2SM_temp['documentation'] = str(sheet.cell_value(row,3))
-            CM2SM_temp['parameters']['req_plc'] = plc
-            CM2SM_tags.append(CM2SM_temp.copy())
-        
-        elif sheet.cell_value(row,4) == 'gtypCMCSMHmiData' and sheet.cell_value(row,1) == '':
-            name = str(sheet.cell_value(row,2))
-            CMCSM_temp['name'] = re.sub('gt_CMCSMHmiData_', '', name, flags=re.I)
-            CMCSM_temp['documentation'] = str(sheet.cell_value(row,3))
-            CMCSM_temp['parameters']['req_plc'] = plc
-            CMCSM_tags.append(CMCSM_temp.copy())
-            
-        elif sheet.cell_value(row,4) == 'gtypCMVSMHmiData' and sheet.cell_value(row,1) == '':
-            name = str(sheet.cell_value(row,2))
-            CMVSM_temp['name'] = re.sub('gt_CMVSMHmiData_', '', name, flags=re.I)
-            CMVSM_temp['documentation'] = str(sheet.cell_value(row,3))
-            CMVSM_temp['parameters']['req_plc'] = plc
-            CMVSM_tags.append(CMVSM_temp.copy())
-        
-        elif sheet.cell_value(row,4) == 'gtypCMIVHmiData' and sheet.cell_value(row,1) == '':
-            name = str(sheet.cell_value(row,2))
-            CMIV_temp['name'] = re.sub('gt_CMIVHmiData_', '', name, flags=re.I)
-            CMIV_temp['documentation'] = str(sheet.cell_value(row,3))
-            CMIV_temp['parameters']['req_plc'] = plc
-            CMIV_tags.append(CMIV_temp.copy())
-
-        elif sheet.cell_value(row,4) == 'gtypCMCVHmiData' and sheet.cell_value(row,1) == '':
-            name = str(sheet.cell_value(row,2))
-            CMCV_temp['name'] = re.sub('gt_CMCVHmiData_', '', name, flags=re.I)
-            CMCV_temp['documentation'] = str(sheet.cell_value(row,3))
-            CMCV_temp['parameters']['req_plc'] = plc
-            CMCV_tags.append(CMCV_temp.copy())
-
-        elif sheet.cell_value(row,4) == 'gtypCMDDHmiData' and sheet.cell_value(row,1) == '':
-            name = str(sheet.cell_value(row,2))
-            CMDD_temp['name'] = re.sub('gt_CMDDHmiData_', '', name, flags=re.I)
-            CMDD_temp['documentation'] = str(sheet.cell_value(row,3))
-            CMDD_temp['parameters']['req_plc'] = plc
-            CMDD_tags.append(CMDD_temp.copy())
-        
-        elif sheet.cell_value(row,4) == 'gtypCMIDHmiData' and sheet.cell_value(row,1) == '':
-            name = str(sheet.cell_value(row,2))
-            CMID_temp['name'] = re.sub('gt_CMIDHmiData_', '', name, flags=re.I)
-            CMID_temp['documentation'] = str(sheet.cell_value(row,3))
-            CMID_temp['parameters']['req_plc'] = plc
-            CMID_tags.append(CMID_temp.copy())
-        
-        elif sheet.cell_value(row,4) == 'gtypCMCDHmiData' and sheet.cell_value(row,1) == '':
-            name = str(sheet.cell_value(row,2))
-            CMCD_temp['name'] = re.sub('gt_CMCDHmiData_', '', name, flags=re.I)
-            CMCD_temp['documentation'] = str(sheet.cell_value(row,3))
-            CMCD_temp['parameters']['req_plc'] = plc
-            CMCD_tags.append(CMCD_temp.copy())
-
-        elif sheet.cell_value(row,4) == 'gtypPidHmiData' and sheet.cell_value(row,1) == '':
-            name = str(sheet.cell_value(row,2))
-            PIDv1_temp['name'] = re.sub('gt_PidHmiData_', '', name, flags=re.I)
-            PIDv1_temp['documentation'] = str(sheet.cell_value(row,3))
-            PIDv1_temp['parameters']['req_plc'] = plc
-            PIDv1_tags.append(PIDv1_temp.copy())
-            
-        elif sheet.cell_value(row,4) == 'gtypPid_V2_HmiData' and sheet.cell_value(row,1) == '':
-            name = str(sheet.cell_value(row,2))
-            PIDv2_temp['name'] = re.sub('gt_PidHmiData_', '', name, flags=re.I)
-            PIDv2_temp['documentation'] = str(sheet.cell_value(row,3))
-            PIDv2_temp['parameters']['req_plc'] = plc
-            PIDv2_tags.append(PIDv2_temp.copy())
+# Loop once per UDT
+for udt_name in udt_dict:
+    temp_folder = tag_folder(udt_name)
     
-    # Evaluate ALIAS rows (array-indexed IO, etc).
-    elif sheet.cell_value(row,0) == 'ALIAS':
-        if str(sheet.cell_value(row,5)).startswith('gtaAIHmiData'):
-            name = str(sheet.cell_value(row,2))
-            AI_temp['name'] = re.sub('gt_HmiData_', '', name, flags=re.I)
-            AI_temp['documentation'] = str(sheet.cell_value(row,3))
-            AI_temp['parameters']['req_plc'] = plc
-            AI_tags.append(AI_temp.copy())
+    # Check each row in sheet
+    for row in range(sheet.nrows):
+        # Unaliased UDT build
+        # Tag must be 'TAG' type, global scope, and match desired PLC datatype
+        if sheet.cell_value(row,0) == 'TAG' and sheet.cell_value(row,1) == '' and sheet.cell_value(row,4) == udt_dict[udt_name]['udt_plc']:
+            temp_name = sheet.cell_value(row,2)
+            temp_name = re.sub(udt_dict[udt_name]['udt_plc_prefix'], '', temp_name, flags=re.I)
+            temp_udt = tag_udt(temp_name, udt_name, plc)
+            temp_udt.documentation = sheet.cell_value(row,3)
+            temp_folder.tags.append(temp_udt.__dict__) 
         
-        elif str(sheet.cell_value(row,5)).startswith('gtaDIHmiData'):
-            name = str(sheet.cell_value(row,2))
-            DI_temp['name'] = re.sub('gt_HmiData_', '', name, flags=re.I)
-            DI_temp['documentation'] = str(sheet.cell_value(row,3))
-            DI_temp['parameters']['req_plc'] = plc
-            DI_tags.append(DI_temp.copy())
-
-# Create final dictionary with all identified tags
-import_dict['tags'] = [{},{},{},{},{},{},{},{},{},{},{}]
-import_dict['tags'][0]['name'] = 'CMCSM'
-import_dict['tags'][0]['tagType'] = 'Folder'
-import_dict['tags'][0]['tags'] = CMCSM_tags
-import_dict['tags'][1]['name'] = 'CMVSM'
-import_dict['tags'][1]['tagType'] = 'Folder'
-import_dict['tags'][1]['tags'] = CMVSM_tags
-import_dict['tags'][2]['name'] = 'CMIV'
-import_dict['tags'][2]['tagType'] = 'Folder'
-import_dict['tags'][2]['tags'] = CMIV_tags
-import_dict['tags'][3]['name'] = 'CMCV'
-import_dict['tags'][3]['tagType'] = 'Folder'
-import_dict['tags'][3]['tags'] = CMCV_tags
-import_dict['tags'][4]['name'] = 'CMDD'
-import_dict['tags'][4]['tagType'] = 'Folder'
-import_dict['tags'][4]['tags'] = CMDD_tags
-import_dict['tags'][5]['name'] = 'CMID'
-import_dict['tags'][5]['tagType'] = 'Folder'
-import_dict['tags'][5]['tags'] = CMID_tags
-import_dict['tags'][6]['name'] = 'CMCD'
-import_dict['tags'][6]['tagType'] = 'Folder'
-import_dict['tags'][6]['tags'] = CMCD_tags
-import_dict['tags'][7]['name'] = 'PID'
-import_dict['tags'][7]['tagType'] = 'Folder'
-import_dict['tags'][7]['tags'] = PIDv1_tags
-# if PIDv2_tags != []: 
-#     import_dict['tags'][7]['tags'].append(PIDv2_tags)         # Think this needs a for loop instead of a single append
-
-# for key in PIDv2_tags:
-#     import_dict['tags'][7]['tags'].append(PIDv2_tags[key])    # 1st attempt. no good as is. Think it won't work with blank list either.
-import_dict['tags'][8]['name'] = 'AI'
-import_dict['tags'][8]['tagType'] = 'Folder'
-import_dict['tags'][8]['tags'] = AI_tags
-import_dict['tags'][9]['name'] = 'DI'
-import_dict['tags'][9]['tagType'] = 'Folder'
-import_dict['tags'][9]['tags'] = DI_tags
-import_dict['tags'][10]['name'] = 'CM2SM'
-import_dict['tags'][10]['tagType'] = 'Folder'
-import_dict['tags'][10]['tags'] = CM2SM_tags
+        # Aliased UDT build (if alias defined)
+        elif udt_dict[udt_name]['udt_plc_alias'] is not None:
+            # Tag must be 'ALIAS' type and be derived from desired PLC datatype
+            if sheet.cell_value(row,0) == 'ALIAS' and str(sheet.cell_value(row,5)).startswith(udt_dict[udt_name]['udt_plc_alias']):
+                temp_name = sheet.cell_value(row,2)
+                temp_name = re.sub(udt_dict[udt_name]['udt_plc_prefix'], '', temp_name, flags=re.I)
+                temp_udt = tag_udt(temp_name, udt_name, plc)
+                temp_udt.documentation = sheet.cell_value(row,3)
+                temp_folder.tags.append(temp_udt.__dict__)
+    
+    # After creating all tags of a given udt, append UDT folder to import folder
+    import_folder.tags.append(temp_folder.__dict__)
 
 
-# Dump import_dict to file
-json.dump(import_dict, json_file)
+# Define standard tag folder
+standard_folder = tag_folder('Standard')
+
+# Loop once per standard type
+for datatype in standard_dict:
+    temp_folder = tag_folder(datatype)
+
+    # Check each row in sheet
+    for row in range(sheet.nrows):
+        # Tag must be 'TAG' type, global scope, contain desired tag prefix, and match desired PLC datatype
+        if sheet.cell_value(row,0) == 'TAG' and sheet.cell_value(row,1) == '' and (standard_dict[datatype]['plc_prefix'] in sheet.cell_value(row,2)) and str(sheet.cell_value(row,4)) == datatype:
+            temp_name = sheet.cell_value(row,2)
+            temp_standard = tag_standard(temp_name, standard_dict[datatype]['ignition_datatype'], plc)
+            temp_standard.documentation = sheet.cell_value(row,3)
+            temp_folder.tags.append(temp_standard.__dict__)
+
+    # After creating all tags of a given standard datatype, append datatype folder to standard folder
+    standard_folder.tags.append(temp_folder.__dict__)
+
+# Append standard tags to import tag folder
+import_folder.tags.append(standard_folder.__dict__)
 
 
-# class tag_folder:
-#     def __init__(self, name):
-#         self.name = name
-#         self.tagType = 'Folder'
-#         self.tags = []
+# Create tag import JSON file
+# file_path example: 'ignition-tag-import/output/[B8_CP_001] tag import 03Jun2020 132501.json'
+datetime_string = datetime.now().strftime('%d%b%Y %H%M%S')
+file_path = 'ignition-tag-import/output/' + plc + ' tag import ' + datetime_string + '.json'
+import_file = open(file_path, 'w+')
 
-# class tag_standard:
-#     def __init__(self, name, dataType):
-#         self.name = name
-#         self.dataType = dataType
-#         self.tagType = 'AtomicTag'
-#         self.tagGroup = 'Direct 1s'
-#         self.valueSource = 'opc'
-#         self.opcServer = 'RSLinx'
-#         self.opcItemPath = plc + name
-#         self.documentation = None
-
-# class tag_udt:
-#     def __init__(self, name, udt_name):
-#         self.name = name
-#         self.documentation = None
-#         self.tagType = 'UdtInstance'
-#         self.parameters = {
-#             'req_plc': plc
-#         }
-#         try:
-#             self.typeId = udt_dict[udt_name]['udt_ignition']
-#         except:
-#             self.typeId = 'None'
-
-
-# # UDT definitions used when constructing tags and searching excel/csv.
-# # Nested lists used to allow for easier future automation/GUI input
-# # Primary list:     one UDT (secondary list) per element
-# # Secondary list:   [UDT Name, Ignition UDT Path, PLC UDT, PLC UDT Array (for aliased tags - optional)]
-# # PLC UDT generally refers to HMIData tag UDT.
-# # PLC UDT array primarily used for AI/DI imports, where tags are largely defined as array aliases
-# udt_raw = [
-#     ['CMCSM',   'Standard/CMCSM/gtypCMCSM',     'gtypCMCSMHmiData',     None],
-#     ['CMVSM',   'Standard/CMVSM/gtypCMVSM',     'gtypCMVSMHmiData',     None],
-#     ['CMIV',    'Standard/CMIV/gtypCMIV',       'gtypCMIVHmiData',      None],
-#     ['CMCV',    'Standard/CMCV/gtypCMCV',       'gtypCMCVHmiData',      None],
-#     ['CMDD',    'Standard/CMDD/gtypCMDD',       'gtypCMDDHmiData',      None],
-#     ['CMID',    'Standard/CMID/gtypCMID',       'gtypCMIDHmiData',      None],
-#     ['CMCD',    'Standard/CMCD/gtypCMCD',       'gtypCMCDHmiData',      None],
-#     ['PIDv1',   'Standard/PID/gtypPIDv1',       'gtypPIDHmiData',       None],
-#     ['PIDv2',   'Standard/PID/gtypPIDv2',       'gtypPID_v2_HmiData',   None],
-#     ['AI',      'Standard/AI/gtypAI',           'gtypAIHmiData',        'gtaAIHmiData'],
-#     ['DI',      'Standard/DI/gtypDI',           'gtypDIHmiData',        'gtaDIHmiData']   
-# ]
-
-# # UDT dictionary enables simple loops to create tags lists iteratively. Example dict entry:
-# # {   
-# #     'CMCSM': {
-# #         'udt_ignition': 'Standard/CMCSM/gtypCMCSM',
-# #         'udt_plc': 'gtypCMCSMHmiData',
-# #         'udt_plc_array': None
-# #     },
-# #     ...
-# # }
-# udt_dict = {}
-# for i in range(len(udt_raw)):
-#     temp = {}
-#     temp['udt_ignition']    = udt_raw[i][1]
-#     temp['udt_plc']         = udt_raw[i][2]
-#     temp['udt_plc_array']   = udt_raw[i][3]
-
-#     udt_dict[udt_raw[i][0]] = temp
-
+# Dump import_folder to file with indentation and alphabetical sorting
+json.dump(import_folder.__dict__, import_file, indent=4, sort_keys=True)
