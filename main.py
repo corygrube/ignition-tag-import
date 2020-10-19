@@ -19,8 +19,8 @@ class tag_standard:
         self.tagType = 'AtomicTag'
         self.tagGroup = 'Direct 1s'
         self.valueSource = 'opc'
-        self.opcServer = 'RSLinx'
-        self.opcItemPath = plc + name
+        self.opcServer = opc_server
+        self.opcItemPath = opc_path_prefix + plc + name
         self.documentation = None
 
 # Ignition UDT tag class
@@ -77,7 +77,7 @@ for i in range(len(udt_raw)):
     temp['udt_ignition']    = udt_raw[i][1]
     temp['udt_plc']         = udt_raw[i][2]
     temp['udt_plc_alias']   = udt_raw[i][3]
-    temp['udt_plc_prefix']   = udt_raw[i][4]
+    temp['udt_plc_prefix']  = udt_raw[i][4]
 
     udt_dict[udt_raw[i][0]] = temp
 
@@ -85,28 +85,28 @@ for i in range(len(udt_raw)):
 # Standard tag definitions used when constructing tags and searching excel/csv.
 # Nested lists used to allow for easier future automation/GUI input
 # Primary list:     one standard tag type (secondary list) per element
-# Secondary list:   [PLC datatype, Ignition datatype, PLC tagname prefix]
+# Secondary list:   [PLC datatype, Ignition datatype, Ignition equivalent array datatype (if one exists)]
 standard_raw = [
-    ['BOOL',    'Boolean',  'gb_HmiData_'],
-    ['INT',     'Short',    'gi_HmiData_'],
-    ['DINT',    'Integer',  'gd_HmiData_'],
-    ['REAL',    'Float',    'gr_HmiData_'],
-    ['STRING',  'String',  'gs_HmiData_'],
+    ['BOOL',    'Boolean',  'Boolean Array'],
+    ['INT',     'Short',    'Short Array'],
+    ['DINT',    'Integer',  'Integer Array'],
+    ['REAL',    'Float',    'Float Array'],
+    ['STRING',  'String',   'String Array'],
 ]
 
 # Standard tag dictionary enables simple loops to create tags lists iteratively. Example dict entry:
 # {   
 #     'BOOL': {
 #         'ignition_datatype': 'Boolean',
-#         'plc_prefix': 'gb_HmiData_'
+#         'ignition_datatype_array': 'Boolean Array'
 #     },
 #     ...
 # }
 standard_dict = {}
 for i in range(len(standard_raw)):
     temp = {}
-    temp['ignition_datatype']    = standard_raw[i][1]
-    temp['plc_prefix']         = standard_raw[i][2]
+    temp['ignition_datatype']       = standard_raw[i][1]
+    temp['ignition_datatype_array'] = standard_raw[i][2]
 
     standard_dict[standard_raw[i][0]] = temp
 
@@ -115,9 +115,18 @@ for i in range(len(standard_raw)):
 workbook = xlrd.open_workbook('ignition-tag-import/tags.xlsx')
 sheet = workbook.sheet_by_index(0)
 
-# Define plc shortcut, import folder
+# Define plc shortcut, opc details
+# Ignition OPC UA server required additional prefix for OPC item path
 plc = '[B8_CP_001]'
-import_folder = tag_folder('Imported')
+opc_server = 'RSLinx'
+if 'Ignition OPC UA Server' in opc_server:
+    opc_path_prefix = 'ns=1;s='
+else:
+    opc_path_prefix = ''
+
+
+# Define import tag folder
+import_folder = tag_folder('Imported (Delete before startup)')
 
 # Loop once per UDT
 for udt_name in udt_dict:
@@ -157,10 +166,18 @@ for datatype in standard_dict:
 
     # Check each row in sheet
     for row in range(sheet.nrows):
-        # Tag must be 'TAG' type, global scope, contain desired tag prefix, and match desired PLC datatype
-        if sheet.cell_value(row,0) == 'TAG' and sheet.cell_value(row,1) == '' and (standard_dict[datatype]['plc_prefix'] in sheet.cell_value(row,2)) and str(sheet.cell_value(row,4)) == datatype:
+        # Standalone tag build
+        # Tag must be 'TAG' type, global scope, contain 'hmidata' tagname, and match desired PLC datatype
+        if sheet.cell_value(row,0) == 'TAG' and sheet.cell_value(row,1) == '' and ('hmidata' in str(sheet.cell_value(row,2)).lower()) and str(sheet.cell_value(row,4)).startswith(datatype):
             temp_name = sheet.cell_value(row,2)
-            temp_standard = tag_standard(temp_name, standard_dict[datatype]['ignition_datatype'], plc)
+            
+            # determine datatype based on whether tag is standalone (e.g. BOOL) or arrayed (e.g. BOOL[10])
+            if sheet.cell_value(row,4) == datatype:
+                temp_standard = tag_standard(temp_name, standard_dict[datatype]['ignition_datatype'], plc)
+            elif str(sheet.cell_value(row,4)).startswith(datatype + '[') and standard_dict[datatype]['ignition_datatype_array'] is not None:
+                temp_standard = tag_standard(temp_name, standard_dict[datatype]['ignition_datatype_array'], plc)
+            else:
+                continue
             temp_standard.documentation = sheet.cell_value(row,3)
             temp_folder.tags.append(temp_standard.__dict__)
 
