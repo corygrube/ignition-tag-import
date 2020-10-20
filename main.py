@@ -1,7 +1,12 @@
 import json
 import xlrd
+import pyexcel
 import re
+import sys
+import os
 from datetime import datetime
+from shutil import copyfile
+
 
 
 # Ignition folder class
@@ -32,7 +37,6 @@ class tag_udt:
         self.parameters = {
             'req_plc': plc
         }
-        
         # try/except handles cases where desired UDT isn't defined in Ignition
         # Empty 'None' UDT type created for this purpose 
         try:
@@ -111,9 +115,19 @@ for i in range(len(standard_raw)):
     standard_dict[standard_raw[i][0]] = temp
 
 
-# Load excel workbook
-workbook = xlrd.open_workbook('ignition-tag-import/tags.xlsx')
+# Load excel/csv workbook.
+# If CSV, convert to excel book, save it as a temp file
+# If excel, copy to temp file to prevent read/file open errors
+workbook_path = 'ignition-tag-import/tags.xlsx'
+temp_workbook_path = 'ignition-tag-import/temp/temp_workbook.xlsx'
+if workbook_path.lower().endswith('.csv'):
+    csv_workbook = pyexcel.get_sheet(file_name=workbook_path, delimiter=',')
+    csv_workbook.save_as(temp_workbook_path)
+else:
+    copyfile(workbook_path, temp_workbook_path)
+workbook = xlrd.open_workbook(temp_workbook_path)
 sheet = workbook.sheet_by_index(0)
+
 
 # Define plc shortcut, opc details
 # Ignition OPC UA server required additional prefix for OPC item path
@@ -189,10 +203,13 @@ import_folder.tags.append(standard_folder.__dict__)
 
 
 # Create tag import JSON file
-# file_path example: 'ignition-tag-import/output/[B8_CP_001] tag import 03Jun2020 132501.json'
+# output_path example: 'ignition-tag-import/output/[B8_CP_001] tag import 03Jun2020 132501.json'
 datetime_string = datetime.now().strftime('%d%b%Y %H%M%S')
-file_path = 'ignition-tag-import/output/' + plc + ' tag import ' + datetime_string + '.json'
-import_file = open(file_path, 'w+')
+output_path = 'ignition-tag-import/output/' + plc + ' tag import ' + datetime_string + '.json'
+output_file = open(output_path, 'w+')
 
 # Dump import_folder to file with indentation and alphabetical sorting
-json.dump(import_folder.__dict__, import_file, indent=4, sort_keys=True)
+json.dump(import_folder.__dict__, output_file, indent=4, sort_keys=True)
+
+# Delete temp excel file after script completes
+os.remove(temp_workbook_path)

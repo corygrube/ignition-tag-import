@@ -1,1 +1,3 @@
 xlrd
+pyexcel
+pyexcel-xlsx
