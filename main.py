@@ -52,6 +52,7 @@ class tag_udt:
 # PLC UDT generally refers to HMIData tag UDT.
 # PLC UDT array primarily used for AI/DI imports, where tags are largely defined as array aliases
 udt_raw = [
+	['CM2SM',			'Standard/CM2SM/gtypCM2SM',					'gtypCM2SMHmiData',		None,				'gt_CM2SMHmiData_'],
 	['CMCSM',			'Standard/CMCSM/gtypCMCSM',					'gtypCMCSMHmiData',		None,				'gt_CMCSMHmiData_'],
 	['CMVSM',			'Standard/CMVSM/gtypCMVSM',					'gtypCMVSMHmiData',		None,				'gt_CMVSMHmiData_'],
 	['CMIV',			'Standard/CMIV/gtypCMIV',					'gtypCMIVHmiData',		None,				'gt_CMIVHmiData_'],
@@ -135,7 +136,7 @@ sheet = workbook.sheet_by_index(0)
 
 # Define plc shortcut, opc details
 # Ignition OPC UA server required additional prefix for OPC item path
-plc = '[B80_CP_001]'
+plc = '[B11_CP_01]'
 opc_server = 'RSLinx'
 if 'Ignition OPC UA Server' in opc_server:
 	opc_path_prefix = 'ns=1;s='
