@@ -99,7 +99,7 @@ standard_raw = [
 	['BOOL',	'Boolean',	'Boolean Array'],
 	['INT',		'Short',	'Short Array'],
 	['DINT',	'Integer',	'Integer Array'],
-	['REAL',	'Float',	'Float Array'],
+	['REAL',	'Float4',	'Float Array'],
 	['STRING',	'String',	'String Array'],
 ]
 
