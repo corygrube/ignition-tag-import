@@ -97,10 +97,10 @@ for i in range(len(udt_raw)):
 # Secondary list:   [PLC datatype, Ignition datatype, Ignition equivalent array datatype (if one exists)]
 standard_raw = [
 	['BOOL',	'Boolean',	'Boolean Array'],
-	['INT',		'Short',	'Short Array'],
-	['DINT',	'Integer',	'Integer Array'],
+	['INT',		'Int2',	'Short Array'],
+	['DINT',	'Int4',	'Integer Array'],
 	['REAL',	'Float4',	'Float Array'],
-	['STRING',	'String',	'String Array'],
+	['STRING',	'String',	'String Array']
 ]
 
 # Standard tag dictionary enables simple loops to create tags lists iteratively. Example dict entry:
